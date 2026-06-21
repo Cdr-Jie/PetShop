@@ -149,7 +149,7 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isVetAdminView) "Pet Shop Dashboard" else "Pet Care Hub") },
+                title = { Text(if (isVetAdminView) "Veterinary System" else "Pet Care Hub") },
                 actions = {
                     IconButton(onClick = onLogout) {
                         Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Logout")
