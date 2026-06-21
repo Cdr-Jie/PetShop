@@ -12,6 +12,7 @@ import com.example.petshop.ui.navigation.SessionManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppointmentViewModel(app: Application) : AndroidViewModel(app) {
@@ -77,9 +78,11 @@ class AppointmentViewModel(app: Application) : AndroidViewModel(app) {
         notes: String,
         onResult: (Boolean) -> Unit = {}
     ) = viewModelScope.launch {
+        val normalizedScheduledAt = normalizeToMinute(scheduledAt)
+
         val petConflicts = db.appointmentDao().countPetConflicts(
             petId = petId,
-            scheduledAt = scheduledAt
+            scheduledAt = normalizedScheduledAt
         )
 
         if (petConflicts > 0) {
@@ -97,14 +100,14 @@ class AppointmentViewModel(app: Application) : AndroidViewModel(app) {
                     val serviceDurationMinutes = serviceId
                         ?.let { db.serviceDao().getById(it)?.durationMinutes }
                         ?: 30
-                    val slotEndTime = scheduledAt + serviceDurationMinutes * 60_000L
+                    val slotEndTime = normalizedScheduledAt + serviceDurationMinutes * 60_000L
 
-                    val existingSlot = db.timeSlotDao().findByStartTime(staffId, scheduledAt)
+                    val existingSlot = db.timeSlotDao().findByStartTime(staffId, normalizedScheduledAt)
                     val resolvedSlotId = existingSlot?.timeSlotId
                         ?: db.timeSlotDao().insert(
                             TimeSlot(
                                 staffId = staffId,
-                                slotStartTime = scheduledAt,
+                                slotStartTime = normalizedScheduledAt,
                                 slotEndTime = slotEndTime
                             )
                         ).toInt()
@@ -129,7 +132,7 @@ class AppointmentViewModel(app: Application) : AndroidViewModel(app) {
                             staffId = staffId,
                             serviceId = serviceId,
                             timeSlotId = slotId,
-                            scheduledAt = scheduledAt,
+                            scheduledAt = normalizedScheduledAt,
                             notes = notes
                         )
                     )
@@ -154,20 +157,94 @@ class AppointmentViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun updateStatus(id: Int, status: AppointmentStatus) = viewModelScope.launch {
-        db.withTransaction {
-            db.appointmentDao().updateStatus(id, status)
+    private fun normalizeToMinute(millis: Long): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
 
-            if (status == AppointmentStatus.CANCELLED || status == AppointmentStatus.NO_SHOW) {
+    fun updateStatus(
+        id: Int,
+        status: AppointmentStatus,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) = viewModelScope.launch {
+        runCatching {
+            db.withTransaction {
                 val appointment = db.appointmentDao().getById(id)
-                val slotId = appointment?.timeSlotId
-                if (slotId != null) {
-                    val activeAppointments = db.appointmentDao().countActiveByTimeSlot(slotId)
-                    if (activeAppointments == 0) {
-                        db.timeSlotDao().updateBookedState(slotId, false)
+                    ?: error("Appointment not found.")
+
+                if (status == AppointmentStatus.CONFIRMED) {
+                    val staffId = appointment.staffId
+                        ?: error("Cannot confirm without assigning a vet.")
+                    val normalizedStart = normalizeToMinute(appointment.scheduledAt)
+
+                    val conflicts = db.appointmentDao().countStaffConflictsAtTime(
+                        staffId = staffId,
+                        scheduledAt = normalizedStart,
+                        excludeAppointmentId = id
+                    )
+                    if (conflicts > 0) {
+                        error("Error: double booked. This vet already has another active appointment at this time.")
+                    }
+
+                    val durationMinutes = appointment.serviceId
+                        ?.let { db.serviceDao().getById(it)?.durationMinutes }
+                        ?: 30
+                    val slotEnd = normalizedStart + durationMinutes * 60_000L
+
+                    val slotForAppointment = db.vetTimeSlotDao().getSlotByAppointmentId(id)
+                    if (slotForAppointment != null) {
+                        db.vetTimeSlotDao().updateBookingStatus(slotForAppointment.slotId, true, id)
+                    } else {
+                        val slotAtTime = db.vetTimeSlotDao().getByStaffAndStartTime(
+                            staffId = staffId,
+                            slotStartTime = normalizedStart
+                        )
+
+                        if (slotAtTime == null) {
+                            db.vetTimeSlotDao().insert(
+                                VetTimeSlot(
+                                    staffId = staffId,
+                                    slotStartTime = normalizedStart,
+                                    slotEndTime = slotEnd,
+                                    isBooked = true,
+                                    appointmentId = id
+                                )
+                            )
+                        } else {
+                            if (slotAtTime.isBooked && slotAtTime.appointmentId != id) {
+                                error("Error: double booked. This vet already has another active appointment at this time.")
+                            }
+                            db.vetTimeSlotDao().updateBookingStatus(slotAtTime.slotId, true, id)
+                        }
+                    }
+
+                    appointment.timeSlotId?.let { db.timeSlotDao().updateBookedState(it, true) }
+                }
+
+                db.appointmentDao().updateStatus(id, status)
+
+                if (status == AppointmentStatus.CANCELLED || status == AppointmentStatus.NO_SHOW) {
+                    val slotId = appointment.timeSlotId
+                    if (slotId != null) {
+                        val activeAppointments = db.appointmentDao().countActiveByTimeSlot(slotId)
+                        if (activeAppointments == 0) {
+                            db.timeSlotDao().updateBookedState(slotId, false)
+                        }
+                    }
+
+                    val vetSlot = db.vetTimeSlotDao().getSlotByAppointmentId(id)
+                    if (vetSlot != null) {
+                        db.vetTimeSlotDao().updateBookingStatus(vetSlot.slotId, false, null)
                     }
                 }
             }
+        }.onSuccess {
+            onResult(true, "Status updated to ${status.name}.")
+        }.onFailure {
+            onResult(false, it.message ?: "Unable to update status.")
         }
     }
 }

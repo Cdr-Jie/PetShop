@@ -75,6 +75,21 @@ interface AppointmentDao {
     )
     suspend fun countActiveByTimeSlot(timeSlotId: Int): Int
 
+    @Query(
+        """
+        SELECT COUNT(*) FROM appointments
+        WHERE staffId = :staffId
+          AND scheduledAt = :scheduledAt
+          AND appointmentId != :excludeAppointmentId
+          AND status IN ('PENDING','CONFIRMED','IN_PROGRESS')
+        """
+    )
+    suspend fun countStaffConflictsAtTime(
+        staffId: Int,
+        scheduledAt: Long,
+        excludeAppointmentId: Int
+    ): Int
+
     @Query("""
         SELECT * FROM appointments
         WHERE status IN ('PENDING','CONFIRMED','IN_PROGRESS')

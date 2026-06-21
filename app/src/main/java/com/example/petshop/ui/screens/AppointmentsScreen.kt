@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +24,7 @@ import com.example.petshop.ui.components.IosTimeSlider
 import com.example.petshop.ui.navigation.SessionManager
 import com.example.petshop.ui.theme.*
 import com.example.petshop.ui.viewmodel.AppointmentViewModel
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -37,6 +39,12 @@ private fun statusColor(status: AppointmentStatus): Color = when (status) {
     AppointmentStatus.CANCELLED   -> StatusCancelled
     AppointmentStatus.NO_SHOW     -> StatusNoShow
 }
+
+private data class StatusChangeRequest(
+    val appointmentId: Int,
+    val currentStatus: AppointmentStatus,
+    val targetStatus: AppointmentStatus
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,16 +63,21 @@ fun AppointmentsScreen(
 
     var showAdd by remember { mutableStateOf(false) }
     var filterStatus by remember { mutableStateOf<AppointmentStatus?>(null) }
+    var pendingStatusChange by remember { mutableStateOf<StatusChangeRequest?>(null) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     val filtered = if (filterStatus == null) appointments
     else appointments.filter { it.appointment.status == filterStatus }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Appointments", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Back") }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -94,7 +107,7 @@ fun AppointmentsScreen(
                         label    = { Text("All") }
                     )
                 }
-                items(AppointmentStatus.values()) { status ->
+                items(AppointmentStatus.entries) { status ->
                     FilterChip(
                         selected = filterStatus == status,
                         onClick  = { filterStatus = if (filterStatus == status) null else status },
@@ -113,11 +126,45 @@ fun AppointmentsScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(filtered, key = { it.appointment.appointmentId }) {
-                        AppointmentCard(it, onStatusChange = { id, s -> vm.updateStatus(id, s) }, isStaffView)
+                        AppointmentCard(
+                            item = it,
+                            onStatusChangeRequest = { id, current, target ->
+                                if (current != target) {
+                                    pendingStatusChange = StatusChangeRequest(id, current, target)
+                                }
+                            },
+                            isStaffView = isStaffView
+                        )
                     }
                 }
             }
         }
+    }
+
+    if (pendingStatusChange != null) {
+        val request = pendingStatusChange!!
+        AlertDialog(
+            onDismissRequest = { pendingStatusChange = null },
+            title = { Text("Change appointment status?") },
+            text = {
+                Text("Update from ${request.currentStatus.name} to ${request.targetStatus.name}? The app will check for scheduling conflicts first.")
+            },
+            confirmButton = {
+                Button(onClick = {
+                    vm.updateStatus(request.appointmentId, request.targetStatus) { success, message ->
+                        scope.launch {
+                            snackbarHostState.showSnackbar(message)
+                        }
+                    }
+                    pendingStatusChange = null
+                }) {
+                    Text("Confirm")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingStatusChange = null }) { Text("Cancel") }
+            }
+        )
     }
 
     if (showAdd && isStaffView) {
@@ -147,7 +194,7 @@ fun AppointmentsScreen(
 @Composable
 private fun AppointmentCard(
     item: AppointmentWithDetails,
-    onStatusChange: (Int, AppointmentStatus) -> Unit,
+    onStatusChangeRequest: (Int, AppointmentStatus, AppointmentStatus) -> Unit,
     isStaffView: Boolean
 ) {
     var showStatusMenu by remember { mutableStateOf(false) }
@@ -185,10 +232,13 @@ private fun AppointmentCard(
                             )
                         )
                         DropdownMenu(expanded = showStatusMenu, onDismissRequest = { showStatusMenu = false }) {
-                            AppointmentStatus.values().forEach { s ->
+                            AppointmentStatus.entries.forEach { s ->
                                 DropdownMenuItem(
                                     text    = { Text(s.name) },
-                                    onClick = { onStatusChange(apt.appointmentId, s); showStatusMenu = false }
+                                    onClick = {
+                                        onStatusChangeRequest(apt.appointmentId, apt.status, s)
+                                        showStatusMenu = false
+                                    }
                                 )
                             }
                         }
