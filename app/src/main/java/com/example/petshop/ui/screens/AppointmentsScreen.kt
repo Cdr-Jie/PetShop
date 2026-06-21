@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,6 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.petshop.data.entity.*
 import com.example.petshop.data.relation.AppointmentWithDetails
 import com.example.petshop.ui.components.IosTimeSlider
+import com.example.petshop.ui.components.PetShopTopAppBar
 import com.example.petshop.ui.navigation.SessionManager
 import com.example.petshop.ui.theme.*
 import com.example.petshop.ui.viewmodel.AppointmentViewModel
@@ -75,17 +75,7 @@ fun AppointmentsScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = { Text("Appointments", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            )
+            PetShopTopAppBar(title = "Appointments", onBack = onBack)
         },
         floatingActionButton = {
             if (isStaffView) {
