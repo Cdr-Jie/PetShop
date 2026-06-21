@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,13 +27,14 @@ fun ClientsScreen(
     val clients     by vm.clients.collectAsState()
     val searchQuery by vm.searchQuery.collectAsState()
     var showAdd     by remember { mutableStateOf(false) }
+    var selectedClient by remember { mutableStateOf<Client?>(null) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Clients", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Back") }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -74,7 +76,11 @@ fun ClientsScreen(
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(clients, key = { it.clientId }) { client ->
-                        ClientCard(client, onViewPets = { onViewPets(client.clientId) }, onDelete = { vm.deleteClient(client) })
+                        ClientCard(
+                            client = client,
+                            onOpen = { selectedClient = client },
+                            onViewPets = { onViewPets(client.clientId) }
+                        )
                     }
                 }
             }
@@ -90,12 +96,31 @@ fun ClientsScreen(
             }
         )
     }
+
+    selectedClient?.let { client ->
+        ClientDetailDialog(
+            client = client,
+            onDismiss = { selectedClient = null },
+            onViewPets = {
+                selectedClient = null
+                onViewPets(client.clientId)
+            },
+            onSave = {
+                vm.updateClient(it)
+                selectedClient = null
+            },
+            onDelete = {
+                vm.deleteClient(client)
+                selectedClient = null
+            }
+        )
+    }
 }
 
 @Composable
-private fun ClientCard(client: Client, onViewPets: () -> Unit, onDelete: () -> Unit) {
-    var showConfirmDelete by remember { mutableStateOf(false) }
+private fun ClientCard(client: Client, onOpen: () -> Unit, onViewPets: () -> Unit) {
     Card(
+        onClick = onOpen,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(2.dp)
@@ -118,19 +143,7 @@ private fun ClientCard(client: Client, onViewPets: () -> Unit, onDelete: () -> U
             IconButton(onClick = onViewPets) {
                 Icon(Icons.Filled.Pets, "Pets", tint = MaterialTheme.colorScheme.primary)
             }
-            IconButton(onClick = { showConfirmDelete = true }) {
-                Icon(Icons.Filled.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
-            }
         }
-    }
-    if (showConfirmDelete) {
-        AlertDialog(
-            onDismissRequest = { showConfirmDelete = false },
-            title   = { Text("Delete Client?") },
-            text    = { Text("This will also delete all their pets and appointments.") },
-            confirmButton = { Button(onClick = { onDelete(); showConfirmDelete = false }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("Delete") } },
-            dismissButton = { TextButton(onClick = { showConfirmDelete = false }) { Text("Cancel") } }
-        )
     }
 }
 
@@ -167,3 +180,118 @@ private fun AddClientDialog(onDismiss: () -> Unit, onConfirm: (String, String, S
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
+
+@Composable
+private fun ClientDetailDialog(
+    client: Client,
+    onDismiss: () -> Unit,
+    onViewPets: () -> Unit,
+    onSave: (Client) -> Unit,
+    onDelete: () -> Unit
+) {
+    var showEdit by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${client.firstName} ${client.lastName}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Phone: ${client.phone}")
+                if (client.email.isNotBlank()) Text("Email: ${client.email}")
+                if (client.address.isNotBlank()) Text("Address: ${client.address}")
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onViewPets) { Text("View Pets") }
+                Button(onClick = { showEdit = true }) { Text("Edit") }
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { showDeleteConfirm = true }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                Text("Delete")
+            }
+        }
+    )
+
+    if (showEdit) {
+        EditClientDialog(
+            client = client,
+            onDismiss = { showEdit = false },
+            onConfirm = {
+                onSave(it)
+                showEdit = false
+            }
+        )
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Client?") },
+            text = { Text("This will also delete all their pets and appointments.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDelete()
+                        showDeleteConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
+private fun EditClientDialog(
+    client: Client,
+    onDismiss: () -> Unit,
+    onConfirm: (Client) -> Unit
+) {
+    var firstName by remember { mutableStateOf(client.firstName) }
+    var lastName by remember { mutableStateOf(client.lastName) }
+    var phone by remember { mutableStateOf(client.phone) }
+    var email by remember { mutableStateOf(client.email) }
+    var address by remember { mutableStateOf(client.address) }
+    var error by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Client") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = firstName, onValueChange = { firstName = it }, label = { Text("First Name *") }, modifier = Modifier.weight(1f), singleLine = true)
+                    OutlinedTextField(value = lastName, onValueChange = { lastName = it }, label = { Text("Last Name *") }, modifier = Modifier.weight(1f), singleLine = true)
+                }
+                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Phone *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Address") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                if (firstName.isBlank() || lastName.isBlank() || phone.isBlank()) {
+                    error = "First name, last name and phone are required"
+                    return@Button
+                }
+                onConfirm(
+                    client.copy(
+                        firstName = firstName.trim(),
+                        lastName = lastName.trim(),
+                        phone = phone.trim(),
+                        email = email.trim(),
+                        address = address.trim()
+                    )
+                )
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+

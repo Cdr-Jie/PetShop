@@ -1,13 +1,33 @@
 package com.example.petshop.ui.screens
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -22,10 +42,11 @@ fun ServicesScreen(
     onBack: () -> Unit,
     vm: ServiceViewModel = viewModel()
 ) {
-    val services   by vm.services.collectAsState()
+    val services by vm.services.collectAsState()
     val categories by vm.categories.collectAsState()
-    var showAdd    by remember { mutableStateOf(false) }
-    var filterCat  by remember { mutableStateOf<String?>(null) }
+    var showAdd by remember { mutableStateOf(false) }
+    var filterCat by remember { mutableStateOf<String?>(null) }
+    var selectedService by remember { mutableStateOf<Service?>(null) }
 
     val filtered = if (filterCat == null) services else services.filter { it.category == filterCat }
 
@@ -34,7 +55,9 @@ fun ServicesScreen(
             TopAppBar(
                 title = { Text("Services", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Back") }
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -45,25 +68,28 @@ fun ServicesScreen(
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Filled.Add, "Add Service")
+                Icon(Icons.Filled.Add, contentDescription = "Add Service")
             }
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
-            // Category filter
             if (categories.isNotEmpty()) {
-                androidx.compose.foundation.lazy.LazyRow(
+                LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     item {
-                        FilterChip(selected = filterCat == null, onClick = { filterCat = null }, label = { Text("All") })
+                        FilterChip(
+                            selected = filterCat == null,
+                            onClick = { filterCat = null },
+                            label = { Text("All") }
+                        )
                     }
                     items(categories) { cat ->
                         FilterChip(
                             selected = filterCat == cat,
-                            onClick  = { filterCat = if (filterCat == cat) null else cat },
-                            label    = { Text(cat) }
+                            onClick = { filterCat = if (filterCat == cat) null else cat },
+                            label = { Text(cat) }
                         )
                     }
                 }
@@ -79,7 +105,7 @@ fun ServicesScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(filtered, key = { it.serviceId }) { service ->
-                        ServiceCard(service, onToggle = { vm.toggleActive(service) }, onDelete = { vm.deleteService(service) })
+                        ServiceListCard(service = service, onOpen = { selectedService = service })
                     }
                 }
             }
@@ -87,103 +113,33 @@ fun ServicesScreen(
     }
 
     if (showAdd) {
-        AddServiceDialog(
+        ServiceAddDialog(
             categories = categories,
-            onDismiss  = { showAdd = false },
-            onConfirm  = { name, cat, desc, price, dur ->
+            onDismiss = { showAdd = false },
+            onConfirm = { name, cat, desc, price, dur ->
                 vm.addService(name, cat, desc, price, dur)
                 showAdd = false
             }
         )
     }
-}
 
-@Composable
-private fun ServiceCard(service: Service, onToggle: () -> Unit, onDelete: () -> Unit) {
-    var showConfirm by remember { mutableStateOf(false) }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(2.dp),
-        colors = if (!service.isActive)
-            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        else CardDefaults.cardColors()
-    ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(service.name, fontWeight = FontWeight.SemiBold)
-                    if (!service.isActive) Text("(Inactive)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                }
-                Text(service.category, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                if (service.description.isNotBlank())
-                    Text(service.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, maxLines = 2)
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("RM ${service.price}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
-                    Text("${service.durationMinutes} min", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                }
+    selectedService?.let { service ->
+        ServiceDetailsDialog(
+            service = service,
+            onDismiss = { selectedService = null },
+            onToggle = {
+                vm.toggleActive(service)
+                selectedService = null
+            },
+            onSave = { updated ->
+                vm.updateService(updated)
+                selectedService = null
+            },
+            onDelete = {
+                vm.deleteService(service)
+                selectedService = null
             }
-            IconButton(onClick = onToggle) {
-                Icon(
-                    if (service.isActive) Icons.Filled.ToggleOn else Icons.Filled.ToggleOff,
-                    "Toggle",
-                    tint = if (service.isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                )
-            }
-            IconButton(onClick = { showConfirm = true }) {
-                Icon(Icons.Filled.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
-            }
-        }
-    }
-    if (showConfirm) {
-        AlertDialog(
-            onDismissRequest = { showConfirm = false },
-            title   = { Text("Delete Service?") },
-            text    = { Text("\"${service.name}\" will be permanently deleted.") },
-            confirmButton = { Button(onClick = { onDelete(); showConfirm = false }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("Delete") } },
-            dismissButton = { TextButton(onClick = { showConfirm = false }) { Text("Cancel") } }
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AddServiceDialog(
-    categories: List<String>,
-    onDismiss: () -> Unit,
-    onConfirm: (String, String, String, Double, Int) -> Unit
-) {
-    var name     by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(categories.firstOrNull() ?: "") }
-    var desc     by remember { mutableStateOf("") }
-    var price    by remember { mutableStateOf("") }
-    var duration by remember { mutableStateOf("30") }
-    var error    by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add Service") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Service Name *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("Price (RM) *") }, modifier = Modifier.weight(1f), singleLine = true)
-                    OutlinedTextField(value = duration, onValueChange = { duration = it }, label = { Text("Duration (min)") }, modifier = Modifier.weight(1f), singleLine = true)
-                }
-                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                if (name.isBlank() || category.isBlank()) { error = "Name and category are required"; return@Button }
-                val p = price.toDoubleOrNull()
-                if (p == null) { error = "Enter a valid price"; return@Button }
-                onConfirm(name, category, desc, p, duration.toIntOrNull() ?: 30)
-            }) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}

@@ -34,6 +34,10 @@ class StaffViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    fun updateStaff(staff: Staff) = viewModelScope.launch {
+        db.staffDao().update(staff)
+    }
+
     fun toggleActive(staff: Staff) = viewModelScope.launch {
         db.staffDao().setActiveStatus(staff.staffId, !staff.isActive)
     }

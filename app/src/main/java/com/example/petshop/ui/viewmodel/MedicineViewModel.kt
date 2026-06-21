@@ -49,8 +49,20 @@ class MedicineViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    fun updateMedicine(medicine: Medicine) = viewModelScope.launch {
+        db.medicineDao().update(medicine)
+    }
+
+    fun updateInventory(inventory: MedicineInventory) = viewModelScope.launch {
+        db.medicineInventoryDao().update(inventory)
+    }
+
     fun adjustStock(inventoryId: Int, delta: Int) = viewModelScope.launch {
         db.medicineInventoryDao().adjustQuantity(inventoryId, delta)
+    }
+
+    fun deleteInventory(inventory: MedicineInventory) = viewModelScope.launch {
+        db.medicineInventoryDao().delete(inventory)
     }
 
     fun deleteMedicine(medicine: Medicine) = viewModelScope.launch {

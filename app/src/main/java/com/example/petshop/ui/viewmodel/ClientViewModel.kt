@@ -37,6 +37,10 @@ class ClientViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
 
+    fun updateClient(client: Client) = viewModelScope.launch {
+        db.clientDao().update(client)
+    }
+
     fun deleteClient(client: Client) = viewModelScope.launch {
         db.clientDao().delete(client)
     }

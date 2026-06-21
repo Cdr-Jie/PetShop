@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -43,6 +44,7 @@ fun PetsScreen(
     val client by vm.client.collectAsState()
     var showAdd by remember(clientId) { mutableStateOf(false) }
     var editingPet by remember(clientId) { mutableStateOf<Pet?>(null) }
+    var selectedPet by remember(clientId) { mutableStateOf<Pet?>(null) }
 
     Scaffold(
         topBar = {
@@ -54,7 +56,7 @@ fun PetsScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Back") }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -82,8 +84,7 @@ fun PetsScreen(
                 items(pets, key = { it.petId }) { pet ->
                     PetCard(
                         pet = pet,
-                        onEdit = { editingPet = pet },
-                        onDelete = { vm.deletePet(pet) }
+                        onOpen = { selectedPet = pet }
                     )
                 }
             }
@@ -110,14 +111,29 @@ fun PetsScreen(
             }
         )
     }
+
+    selectedPet?.let { pet ->
+        PetDetailDialog(
+            pet = pet,
+            onDismiss = { selectedPet = null },
+            onEdit = {
+                selectedPet = null
+                editingPet = pet
+            },
+            onDelete = {
+                vm.deletePet(pet)
+                selectedPet = null
+            }
+        )
+    }
 }
 
 @Composable
-private fun PetCard(pet: Pet, onEdit: () -> Unit, onDelete: () -> Unit) {
-    var showConfirm by remember { mutableStateOf(false) }
+private fun PetCard(pet: Pet, onOpen: () -> Unit) {
     val sdf = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
 
     Card(
+        onClick = onOpen,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(2.dp)
@@ -133,26 +149,7 @@ private fun PetCard(pet: Pet, onEdit: () -> Unit, onDelete: () -> Unit) {
                     Text("Born: ${sdf.format(Date(it))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                 }
             }
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Filled.Edit, "Edit")
-            }
-            IconButton(onClick = { showConfirm = true }) {
-                Icon(Icons.Filled.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
-            }
         }
-    }
-    if (showConfirm) {
-        AlertDialog(
-            onDismissRequest = { showConfirm = false },
-            title   = { Text("Remove Pet?") },
-            text    = { Text("${pet.name} will be removed from the system.") },
-            confirmButton = {
-                Button(onClick = { onDelete(); showConfirm = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Remove") }
-            },
-            dismissButton = { TextButton(onClick = { showConfirm = false }) { Text("Cancel") } }
-        )
     }
 }
 
@@ -196,8 +193,8 @@ private fun AddPetDialog(
                 AppDropdown(
                     label    = "Gender",
                     selected = gender.name,
-                    options  = PetGender.values().map { it.name },
-                    onSelect = { gender = PetGender.values()[it] }
+                    options  = PetGender.entries.map { it.name },
+                    onSelect = { gender = PetGender.entries[it] }
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -279,8 +276,8 @@ private fun EditPetDialog(
                 AppDropdown(
                     label = "Gender",
                     selected = gender.name,
-                    options = PetGender.values().map { it.name },
-                    onSelect = { gender = PetGender.values()[it] }
+                    options = PetGender.entries.map { it.name },
+                    onSelect = { gender = PetGender.entries[it] }
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -371,6 +368,62 @@ private fun defaultPetImageUri(species: String): String {
         "bird" -> "default://pet/bird"
         "rabbit" -> "default://pet/rabbit"
         else -> "default://pet/default"
+    }
+}
+
+@Composable
+private fun PetDetailDialog(
+    pet: Pet,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    val sdf = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(pet.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PetAvatar(pet.profileImageUri)
+                Text("Species: ${pet.species}")
+                Text("Breed: ${pet.breed.ifBlank { "—" }}")
+                Text("Gender: ${pet.gender.name}")
+                pet.birthDate?.let { Text("Born: ${sdf.format(Date(it))}") }
+                pet.weightKg?.let { Text("Weight: $it kg") }
+                if (pet.color.isNotBlank()) Text("Color: ${pet.color}")
+            }
+        },
+        confirmButton = {
+            Button(onClick = onEdit) { Text("Edit") }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { showDeleteConfirm = true }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                    Text("Delete")
+                }
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        }
+    )
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Remove Pet?") },
+            text = { Text("${pet.name} will be removed from the system.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDelete()
+                        showDeleteConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Remove") }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+        )
     }
 }
 

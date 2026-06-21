@@ -177,6 +177,40 @@ class AppointmentViewModel(app: Application) : AndroidViewModel(app) {
         }.timeInMillis
     }
 
+    fun updateAppointment(
+        appointment: Appointment,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) = viewModelScope.launch {
+        runCatching {
+            db.appointmentDao().update(
+                appointment.copy(updatedAt = System.currentTimeMillis())
+            )
+        }.onSuccess {
+            onResult(true, "Appointment updated.")
+        }.onFailure {
+            onResult(false, it.message ?: "Unable to update appointment.")
+        }
+    }
+
+    fun deleteAppointment(
+        appointment: Appointment,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) = viewModelScope.launch {
+        runCatching {
+            db.withTransaction {
+                appointment.timeSlotId?.let { db.timeSlotDao().updateBookedState(it, false) }
+                db.vetTimeSlotDao().getSlotByAppointmentId(appointment.appointmentId)?.let { slot ->
+                    db.vetTimeSlotDao().updateBookingStatus(slot.slotId, false, null)
+                }
+                db.appointmentDao().delete(appointment)
+            }
+        }.onSuccess {
+            onResult(true, "Appointment deleted.")
+        }.onFailure {
+            onResult(false, it.message ?: "Unable to delete appointment.")
+        }
+    }
+
     fun updateStatus(
         id: Int,
         status: AppointmentStatus,

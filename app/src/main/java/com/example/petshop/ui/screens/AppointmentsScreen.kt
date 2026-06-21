@@ -64,6 +64,7 @@ fun AppointmentsScreen(
     var showAdd by remember { mutableStateOf(false) }
     var filterStatus by remember { mutableStateOf<AppointmentStatus?>(null) }
     var pendingStatusChange by remember { mutableStateOf<StatusChangeRequest?>(null) }
+    var selectedAppointment by remember { mutableStateOf<AppointmentWithDetails?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -128,6 +129,7 @@ fun AppointmentsScreen(
                     items(filtered, key = { it.appointment.appointmentId }) {
                         AppointmentCard(
                             item = it,
+                            onOpen = { selectedAppointment = it },
                             onStatusChangeRequest = { id, current, target ->
                                 if (current != target) {
                                     pendingStatusChange = StatusChangeRequest(id, current, target)
@@ -167,6 +169,20 @@ fun AppointmentsScreen(
         )
     }
 
+    selectedAppointment?.let { item ->
+        AppointmentDetailDialog(
+            item = item,
+            isStaffView = isStaffView,
+            onDismiss = { selectedAppointment = null },
+            onDelete = {
+                vm.deleteAppointment(item.appointment) { _, message ->
+                    scope.launch { snackbarHostState.showSnackbar(message) }
+                }
+                selectedAppointment = null
+            }
+        )
+    }
+
     if (showAdd && isStaffView) {
         AddAppointmentDialog(
             clients = clients,
@@ -194,6 +210,7 @@ fun AppointmentsScreen(
 @Composable
 private fun AppointmentCard(
     item: AppointmentWithDetails,
+    onOpen: () -> Unit,
     onStatusChangeRequest: (Int, AppointmentStatus, AppointmentStatus) -> Unit,
     isStaffView: Boolean
 ) {
@@ -201,6 +218,7 @@ private fun AppointmentCard(
     val apt = item.appointment
 
     Card(
+        onClick = onOpen,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(2.dp)
@@ -267,6 +285,96 @@ private fun AppointmentCard(
             }
         }
     }
+}
+
+@Composable
+private fun AppointmentDetailDialog(
+    item: AppointmentWithDetails,
+    isStaffView: Boolean,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    val apt = item.appointment
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Appointment Details") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Client: ${item.client?.firstName ?: "?"} ${item.client?.lastName ?: ""}")
+                Text("Pet: ${item.pet?.name ?: "?"}")
+                Text("Schedule: ${formatDt(apt.scheduledAt)}")
+                Text("Status: ${apt.status.name}")
+                if (apt.notes.isNotBlank()) Text("Notes: ${apt.notes}")
+                if (apt.diagnosis.isNotBlank()) Text("Diagnosis: ${apt.diagnosis}")
+                if (apt.prescription.isNotBlank()) Text("Prescription: ${apt.prescription}")
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+        dismissButton = {
+            if (isStaffView) {
+                TextButton(onClick = { showDeleteConfirm = true }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                    Text("Delete")
+                }
+            }
+        }
+    )
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Appointment?") },
+            text = { Text("This appointment will be permanently removed.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDelete()
+                        showDeleteConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
+private fun EditAppointmentDialog(
+    appointment: Appointment,
+    onDismiss: () -> Unit,
+    onSave: (Appointment) -> Unit
+) {
+    var notes by remember { mutableStateOf(appointment.notes) }
+    var diagnosis by remember { mutableStateOf(appointment.diagnosis) }
+    var prescription by remember { mutableStateOf(appointment.prescription) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Appointment") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
+                OutlinedTextField(value = diagnosis, onValueChange = { diagnosis = it }, label = { Text("Diagnosis") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
+                OutlinedTextField(value = prescription, onValueChange = { prescription = it }, label = { Text("Prescription") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                onSave(
+                    appointment.copy(
+                        notes = notes,
+                        diagnosis = diagnosis,
+                        prescription = prescription
+                    )
+                )
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

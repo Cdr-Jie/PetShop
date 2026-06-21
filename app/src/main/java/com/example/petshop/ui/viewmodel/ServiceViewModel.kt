@@ -35,6 +35,10 @@ class ServiceViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    fun updateService(service: Service) = viewModelScope.launch {
+        db.serviceDao().update(service)
+    }
+
     fun toggleActive(service: Service) = viewModelScope.launch {
         db.serviceDao().setActiveStatus(service.serviceId, !service.isActive)
     }
