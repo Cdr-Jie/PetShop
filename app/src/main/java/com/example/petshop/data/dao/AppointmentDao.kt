@@ -56,6 +56,25 @@ interface AppointmentDao {
     @Query("SELECT COUNT(*) FROM appointments WHERE status = :status")
     suspend fun countByStatus(status: AppointmentStatus): Int
 
+    @Query(
+        """
+        SELECT COUNT(*) FROM appointments
+        WHERE petId = :petId
+          AND scheduledAt = :scheduledAt
+          AND status IN ('PENDING','CONFIRMED','IN_PROGRESS')
+        """
+    )
+    suspend fun countPetConflicts(petId: Int, scheduledAt: Long): Int
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM appointments
+        WHERE timeSlotId = :timeSlotId
+          AND status IN ('PENDING','CONFIRMED','IN_PROGRESS')
+        """
+    )
+    suspend fun countActiveByTimeSlot(timeSlotId: Int): Int
+
     @Query("""
         SELECT * FROM appointments
         WHERE status IN ('PENDING','CONFIRMED','IN_PROGRESS')
@@ -66,6 +85,10 @@ interface AppointmentDao {
     @Transaction
     @Query("SELECT * FROM appointments ORDER BY scheduledAt DESC")
     fun getAllWithDetails(): Flow<List<AppointmentWithDetails>>
+
+    @Transaction
+    @Query("SELECT * FROM appointments WHERE clientId = :clientId ORDER BY scheduledAt DESC")
+    fun getWithDetailsByClient(clientId: Int): Flow<List<AppointmentWithDetails>>
 
     @Query(
         """

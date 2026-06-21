@@ -34,7 +34,7 @@ data class Pet(
     val color: String = "",
     val microchipNumber: String = "",
     val medicalHistory: String = "",
-    val profileImageUri: String = "",
+    val profileImageUri: String = "", // Will use defaults based on species in UI
     val createdAt: Long = System.currentTimeMillis()
 )
 

@@ -18,6 +18,10 @@ data class User(
     val username: String,
     val passwordHash: String,
     val email: String,
+    val firstName: String = "",
+    val lastName: String = "",
+    val phone: String = "",
+    val avatarImageUri: String = "", // Default avatars can be set in UI
     val role: UserRole = UserRole.CLIENT,
     val isActive: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()

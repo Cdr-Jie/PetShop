@@ -13,22 +13,25 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Medication
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -76,11 +79,9 @@ fun DashboardScreen(
         BottomDestination("services", "Services", Icons.Filled.Build),
     )
     val clientTabs = listOf(
-        BottomDestination("schedule", "Schedule", Icons.Filled.DateRange),
-        BottomDestination("mypets", "My Pets", Icons.Filled.Pets),
+        BottomDestination("schedule", "Bookings", Icons.Filled.DateRange),
         BottomDestination("home", "Home", Icons.Filled.Home),
-        BottomDestination("services", "Services", Icons.Filled.Build),
-        BottomDestination("account", "Account", Icons.Filled.Person),
+        BottomDestination("mypets", "My Pets", Icons.Filled.Pets),
     )
     val tabs = if (isVetAdminView) staffTabs else clientTabs
 
@@ -95,6 +96,23 @@ fun DashboardScreen(
     val myTodayAppointments by vm.myTodayAppointments.collectAsState()
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(if (isVetAdminView) "Pet Shop Admin" else "Pet Shop")
+                },
+                actions = {
+                    IconButton(onClick = onLogout) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Logout")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        },
         bottomBar = {
             NavigationBar {
                 tabs.forEach { tab ->
@@ -117,7 +135,7 @@ fun DashboardScreen(
                 "home" -> {
                     if (isVetAdminView) {
                         StaffHomePanel(
-                            username = user?.username ?: "User",
+                            username = user.username,
                             appointmentsToday = todaySchedule,
                             summaryAppointmentsToday = staffSummary.appointmentsToday,
                             summaryUpcoming = staffSummary.upcomingAppointments,
@@ -133,7 +151,8 @@ fun DashboardScreen(
                             myAppointmentsToday = myTodayAppointments,
                             myPetsCount = clientSummary.myPetsCount,
                             hasLinkedClient = myClient != null,
-                            onTapQuick = { selectedTabId = it }
+                            onTapQuick = { selectedTabId = it },
+                            onTapProfile = { selectedTabId = "profile" }
                         )
                     }
                 }
@@ -154,10 +173,10 @@ fun DashboardScreen(
                 "mypets" -> MyPetsPanel(myPets = myPets)
                 "medicine" -> MedicineScreen(onBack = {})
                 "services" -> ServicesScreen(onBack = {})
-                "account" -> AccountPanel(
-                    username = user?.username ?: "User",
-                    role = user?.role?.name ?: "CLIENT",
-                    onLogout = onLogout
+                "profile" -> ProfileScreen(
+                    user = user,
+                    onLogout = onLogout,
+                    onBack = { selectedTabId = "home" }
                 )
                 else -> Text("Unknown tab", modifier = Modifier.padding(16.dp))
             }
@@ -235,6 +254,7 @@ private fun ClientHomePanel(
     myPetsCount: Int,
     hasLinkedClient: Boolean,
     onTapQuick: (String) -> Unit,
+    onTapProfile: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -242,7 +262,8 @@ private fun ClientHomePanel(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                onClick = onTapProfile) {
                 Column(Modifier.padding(14.dp)) {
                     Text("Hi, $username", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text("Here is your pet overview", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -337,33 +358,6 @@ private fun MyPetsPanel(myPets: List<Pet>) {
     }
 }
 
-@Composable
-private fun AccountPanel(username: String, role: String, onLogout: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Card {
-            Column(Modifier.padding(14.dp)) {
-                Text(username, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(role, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        Card(onClick = onLogout) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Logout", style = MaterialTheme.typography.titleMedium)
-                Icon(Icons.Filled.Person, contentDescription = "logout")
-            }
-        }
-    }
-}
 
 @Composable
 private fun QuickTile(label: String, value: String, modifier: Modifier, onClick: () -> Unit) {

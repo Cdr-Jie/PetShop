@@ -35,13 +35,20 @@ enum class AppointmentStatus {
             parentColumns = ["serviceId"],
             childColumns = ["serviceId"],
             onDelete = ForeignKey.SET_NULL
+        ),
+        ForeignKey(
+            entity = TimeSlot::class,
+            parentColumns = ["timeSlotId"],
+            childColumns = ["timeSlotId"],
+            onDelete = ForeignKey.SET_NULL
         )
     ],
     indices = [
         Index("clientId"),
         Index("petId"),
         Index("staffId"),
-        Index("serviceId")
+        Index("serviceId"),
+        Index("timeSlotId")
     ]
 )
 data class Appointment(
@@ -51,6 +58,7 @@ data class Appointment(
     val petId: Int,
     val staffId: Int? = null,
     val serviceId: Int? = null,
+    val timeSlotId: Int? = null,
     val scheduledAt: Long,              // epoch millis
     val status: AppointmentStatus = AppointmentStatus.PENDING,
     val notes: String = "",

@@ -30,7 +30,7 @@ class PetViewModel(app: Application, val clientId: Int) : AndroidViewModel(app) 
 
     fun addPet(
         name: String, species: String, breed: String,
-        gender: PetGender, birthDate: Long?, weightKg: Float?
+        gender: PetGender, birthDate: Long?, weightKg: Float?, profileImageUri: String
     ) = viewModelScope.launch {
         db.petDao().insert(
             Pet(
@@ -40,9 +40,14 @@ class PetViewModel(app: Application, val clientId: Int) : AndroidViewModel(app) 
                 breed     = breed.trim(),
                 gender    = gender,
                 birthDate = birthDate,
-                weightKg  = weightKg
+                weightKg  = weightKg,
+                profileImageUri = profileImageUri.trim()
             )
         )
+    }
+
+    fun updatePet(pet: Pet) = viewModelScope.launch {
+        db.petDao().update(pet)
     }
 
     fun deletePet(pet: Pet) = viewModelScope.launch { db.petDao().delete(pet) }

@@ -7,6 +7,7 @@ import com.example.petshop.data.database.PetShopDatabase
 import com.example.petshop.data.entity.Appointment
 import com.example.petshop.data.entity.Client
 import com.example.petshop.data.entity.Pet
+import com.example.petshop.data.entity.User
 import com.example.petshop.data.relation.AppointmentWithDetails
 import com.example.petshop.ui.navigation.SessionManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +41,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _myClient = MutableStateFlow<Client?>(null)
     val myClient: StateFlow<Client?> = _myClient.asStateFlow()
+
+    private val _myUser = MutableStateFlow<User?>(currentUser)
+    val myUser: StateFlow<User?> = _myUser.asStateFlow()
 
     private val _myPets = MutableStateFlow<List<Pet>>(emptyList())
     val myPets: StateFlow<List<Pet>> = _myPets.asStateFlow()
@@ -81,6 +85,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
         if (currentUser != null) {
             viewModelScope.launch {
+                val freshUser = db.userDao().getById(currentUser.userId)
+                if (freshUser != null) {
+                    _myUser.value = freshUser
+                    SessionManager.currentUser = freshUser
+                }
+
                 val linkedClient = db.clientDao().getByUserId(currentUser.userId)
                 _myClient.value = linkedClient
                 if (linkedClient != null) {
@@ -99,6 +109,62 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             }
+        }
+    }
+
+    fun updateMyProfile(
+        firstName: String,
+        lastName: String,
+        email: String,
+        phone: String,
+        avatarImageUri: String,
+        onResult: (Boolean, String?) -> Unit = { _, _ -> }
+    ) = viewModelScope.launch {
+        val activeUser = _myUser.value ?: SessionManager.currentUser
+        if (activeUser == null) {
+            onResult(false, "No active user session.")
+            return@launch
+        }
+
+        runCatching {
+            val updatedUser = activeUser.copy(
+                firstName = firstName.trim(),
+                lastName = lastName.trim(),
+                email = email.trim(),
+                phone = phone.trim(),
+                avatarImageUri = avatarImageUri.trim()
+            )
+            db.userDao().update(updatedUser)
+
+            val linkedClient = _myClient.value
+            if (linkedClient != null) {
+                db.clientDao().update(
+                    linkedClient.copy(
+                        firstName = firstName.trim(),
+                        lastName = lastName.trim(),
+                        email = email.trim(),
+                        phone = phone.trim()
+                    )
+                )
+            }
+
+            _myUser.value = updatedUser
+            SessionManager.currentUser = updatedUser
+            onResult(true, null)
+        }.onFailure {
+            onResult(false, it.message ?: "Unable to update profile.")
+        }
+    }
+
+    fun updatePet(
+        pet: Pet,
+        onResult: (Boolean, String?) -> Unit = { _, _ -> }
+    ) = viewModelScope.launch {
+        runCatching {
+            db.petDao().update(pet)
+            onResult(true, null)
+        }.onFailure {
+            onResult(false, it.message ?: "Unable to update pet.")
         }
     }
 

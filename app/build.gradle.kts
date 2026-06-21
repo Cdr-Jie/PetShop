@@ -70,4 +70,5 @@ dependencies {
 
     // Extended Icons
     implementation(libs.androidx.compose.material.icons.extended)
+    implementation("io.coil-kt:coil-compose:2.7.0")
 }

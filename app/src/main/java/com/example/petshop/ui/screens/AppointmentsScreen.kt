@@ -1,7 +1,6 @@
 package com.example.petshop.ui.screens
 
 import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -20,6 +19,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.petshop.data.entity.*
 import com.example.petshop.data.relation.AppointmentWithDetails
+import com.example.petshop.ui.components.IosTimeSlider
+import com.example.petshop.ui.navigation.SessionManager
 import com.example.petshop.ui.theme.*
 import com.example.petshop.ui.viewmodel.AppointmentViewModel
 import java.text.SimpleDateFormat
@@ -49,6 +50,8 @@ fun AppointmentsScreen(
     val services by vm.services.collectAsState()
     val petsForClient by vm.petsForClient.collectAsState()
     val addError by vm.addError.collectAsState()
+    val currentUser = SessionManager.currentUser
+    val isStaffView = currentUser?.role == UserRole.ADMIN || currentUser?.role == UserRole.STAFF
 
     var showAdd by remember { mutableStateOf(false) }
     var filterStatus by remember { mutableStateOf<AppointmentStatus?>(null) }
@@ -71,8 +74,10 @@ fun AppointmentsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Filled.Add, "New Appointment")
+            if (isStaffView) {
+                FloatingActionButton(onClick = { showAdd = true }) {
+                    Icon(Icons.Filled.Add, "New Appointment")
+                }
             }
         }
     ) { padding ->
@@ -108,14 +113,14 @@ fun AppointmentsScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(filtered, key = { it.appointment.appointmentId }) {
-                        AppointmentCard(it, onStatusChange = { id, s -> vm.updateStatus(id, s) })
+                        AppointmentCard(it, onStatusChange = { id, s -> vm.updateStatus(id, s) }, isStaffView)
                     }
                 }
             }
         }
     }
 
-    if (showAdd) {
+    if (showAdd && isStaffView) {
         AddAppointmentDialog(
             clients = clients,
             petsForClient = petsForClient,
@@ -142,7 +147,8 @@ fun AppointmentsScreen(
 @Composable
 private fun AppointmentCard(
     item: AppointmentWithDetails,
-    onStatusChange: (Int, AppointmentStatus) -> Unit
+    onStatusChange: (Int, AppointmentStatus) -> Unit,
+    isStaffView: Boolean
 ) {
     var showStatusMenu by remember { mutableStateOf(false) }
     val apt = item.appointment
@@ -168,23 +174,35 @@ private fun AppointmentCard(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
-                Box {
+                if (isStaffView) {
+                    Box {
+                        SuggestionChip(
+                            onClick = { showStatusMenu = true },
+                            label   = { Text(apt.status.name, style = MaterialTheme.typography.labelSmall) },
+                            colors  = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = statusColor(apt.status).copy(alpha = 0.15f),
+                                labelColor     = statusColor(apt.status)
+                            )
+                        )
+                        DropdownMenu(expanded = showStatusMenu, onDismissRequest = { showStatusMenu = false }) {
+                            AppointmentStatus.values().forEach { s ->
+                                DropdownMenuItem(
+                                    text    = { Text(s.name) },
+                                    onClick = { onStatusChange(apt.appointmentId, s); showStatusMenu = false }
+                                )
+                            }
+                        }
+                    }
+                } else {
                     SuggestionChip(
-                        onClick = { showStatusMenu = true },
+                        onClick = {},
+                        enabled = false,
                         label   = { Text(apt.status.name, style = MaterialTheme.typography.labelSmall) },
                         colors  = SuggestionChipDefaults.suggestionChipColors(
                             containerColor = statusColor(apt.status).copy(alpha = 0.15f),
                             labelColor     = statusColor(apt.status)
                         )
                     )
-                    DropdownMenu(expanded = showStatusMenu, onDismissRequest = { showStatusMenu = false }) {
-                        AppointmentStatus.values().forEach { s ->
-                            DropdownMenuItem(
-                                text    = { Text(s.name) },
-                                onClick = { onStatusChange(apt.appointmentId, s); showStatusMenu = false }
-                            )
-                        }
-                    }
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -223,6 +241,10 @@ private fun AddAppointmentDialog(
     var scheduledAt     by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var notes           by remember { mutableStateOf("") }
     var error           by remember { mutableStateOf("") }
+    var showTimeSlider  by remember { mutableStateOf(false) }
+
+    val hour = Calendar.getInstance().apply { timeInMillis = scheduledAt }.get(Calendar.HOUR_OF_DAY)
+    val minute = Calendar.getInstance().apply { timeInMillis = scheduledAt }.get(Calendar.MINUTE)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -279,12 +301,7 @@ private fun AddAppointmentDialog(
                     }, modifier = Modifier.weight(1f)) { Text("Date") }
 
                     OutlinedButton(onClick = {
-                        TimePickerDialog(
-                            context,
-                            { _, h, min -> calendar.set(Calendar.HOUR_OF_DAY, h); calendar.set(Calendar.MINUTE, min); scheduledAt = calendar.timeInMillis },
-                            calendar.get(Calendar.HOUR_OF_DAY),
-                            calendar.get(Calendar.MINUTE), false
-                        ).show()
+                        showTimeSlider = true
                     }, modifier = Modifier.weight(1f)) { Text("Time") }
                 }
                 OutlinedTextField(
@@ -312,6 +329,27 @@ private fun AddAppointmentDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+
+    if (showTimeSlider) {
+        AlertDialog(
+            onDismissRequest = { showTimeSlider = false },
+            title = { Text("Select Time") },
+            text = {
+                IosTimeSlider(
+                    hour = hour,
+                    minute = minute,
+                    onTimeChange = { h, m ->
+                        calendar.set(Calendar.HOUR_OF_DAY, h)
+                        calendar.set(Calendar.MINUTE, m)
+                        scheduledAt = calendar.timeInMillis
+                    }
+                )
+            },
+            confirmButton = {
+                Button(onClick = { showTimeSlider = false }) { Text("Done") }
+            }
+        )
+    }
 }
 
 /** Reusable dropdown composable. */
