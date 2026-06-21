@@ -8,6 +8,7 @@ import com.example.petshop.data.entity.Appointment
 import com.example.petshop.data.entity.Client
 import com.example.petshop.data.entity.Pet
 import com.example.petshop.data.entity.User
+import com.example.petshop.data.entity.UserRole
 import com.example.petshop.data.relation.AppointmentWithDetails
 import com.example.petshop.ui.navigation.SessionManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -44,6 +47,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _myUser = MutableStateFlow<User?>(currentUser)
     val myUser: StateFlow<User?> = _myUser.asStateFlow()
+
+    private val _currentStaffId = MutableStateFlow<Int?>(null)
 
     private val _myPets = MutableStateFlow<List<Pet>>(emptyList())
     val myPets: StateFlow<List<Pet>> = _myPets.asStateFlow()
@@ -76,12 +81,22 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StaffHomeSummary())
 
-        todaySchedule = db.appointmentDao().getAllWithDetails()
-            .map { list ->
-                list.filter { it.appointment.scheduledAt in startOfDay..endOfDay }
-                    .sortedBy { it.appointment.scheduledAt }
-            }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        todaySchedule = combine(
+            db.appointmentDao().getAllWithDetails(),
+            _myClient,
+            _currentStaffId
+        ) { allAppointments, linkedClient, currentStaffId ->
+            allAppointments
+                .filter { item ->
+                    item.appointment.scheduledAt in startOfDay..endOfDay && when (currentUser?.role) {
+                        UserRole.ADMIN -> true
+                        UserRole.STAFF -> item.appointment.staffId == currentStaffId
+                        UserRole.CLIENT -> linkedClient != null && item.appointment.clientId == linkedClient.clientId
+                        else -> false
+                    }
+                }
+                .sortedBy { it.appointment.scheduledAt }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
         if (currentUser != null) {
             viewModelScope.launch {
@@ -90,6 +105,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     _myUser.value = freshUser
                     SessionManager.currentUser = freshUser
                 }
+
+                val linkedStaff = db.staffDao().getByUserId(currentUser.userId)
+                _currentStaffId.value = linkedStaff?.staffId
 
                 val linkedClient = db.clientDao().getByUserId(currentUser.userId)
                 _myClient.value = linkedClient

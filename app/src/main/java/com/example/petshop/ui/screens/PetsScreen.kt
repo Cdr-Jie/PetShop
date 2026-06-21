@@ -35,11 +35,14 @@ fun PetsScreen(
     clientId: Int,
     onBack: () -> Unit
 ) {
-    val vm: PetViewModel = viewModel(factory = PetViewModel.factory(clientId))
+    val vm: PetViewModel = viewModel(
+        key = "pets-$clientId",
+        factory = PetViewModel.factory(clientId)
+    )
     val pets   by vm.pets.collectAsState()
     val client by vm.client.collectAsState()
-    var showAdd by remember { mutableStateOf(false) }
-    var editingPet by remember { mutableStateOf<Pet?>(null) }
+    var showAdd by remember(clientId) { mutableStateOf(false) }
+    var editingPet by remember(clientId) { mutableStateOf<Pet?>(null) }
 
     Scaffold(
         topBar = {

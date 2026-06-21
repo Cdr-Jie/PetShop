@@ -13,45 +13,57 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val LightColorScheme = lightColorScheme(
-    primary            = Teal800,
+    primary            = IndigoPrimary,
     onPrimary          = Color.White,
-    primaryContainer   = Teal100,
-    onPrimaryContainer = Color(0xFF00201B),
-    secondary          = Color(0xFF4A635E),
+    primaryContainer   = SoftLavender,
+    onPrimaryContainer = Color(0xFF1E1B4B),
+    secondary          = EmeraldAccent,
     onSecondary        = Color.White,
-    secondaryContainer = Color(0xFFCCE8E3),
-    onSecondaryContainer = Color(0xFF051F1B),
-    tertiary           = Color(0xFF456179),
+    secondaryContainer = SoftMint,
+    onSecondaryContainer = Color(0xFF052E2B),
+    tertiary           = SkyAccent,
     onTertiary         = Color.White,
-    tertiaryContainer  = Color(0xFFCCE5FF),
-    onTertiaryContainer = Color(0xFF001D31),
+    tertiaryContainer  = SoftSky,
+    onTertiaryContainer = Color(0xFF082F49),
     error              = Color(0xFFBA1A1A),
     onError            = Color.White,
+    errorContainer     = SoftRose,
+    onErrorContainer   = Color(0xFF5F1014),
     background         = SurfaceLight,
-    surface            = SurfaceLight,
+    surface            = SurfaceCardLight,
+    surfaceVariant     = Color(0xFFE9EEF7),
     onBackground       = OnSurfaceLight,
     onSurface          = OnSurfaceLight,
+    onSurfaceVariant   = OnSurfaceMutedLight,
+    outline            = Color(0xFFD0D7E2),
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary            = TealDark200,
-    onPrimary          = TealDark800,
-    primaryContainer   = Teal600,
-    onPrimaryContainer = Teal050,
-    secondary          = Color(0xFFB0CCC7),
-    onSecondary        = Color(0xFF1C3531),
-    secondaryContainer = Color(0xFF334B47),
-    onSecondaryContainer = Color(0xFFCCE8E3),
-    background         = SurfaceDark,
-    surface            = SurfaceDark,
+    primary            = IndigoDarkPrimary,
+    onPrimary          = Color(0xFF24195D),
+    primaryContainer   = Color(0xFF312E81),
+    onPrimaryContainer = Color(0xFFE9E7FF),
+    secondary          = Color(0xFF6EE7B7),
+    onSecondary        = Color(0xFF052E2B),
+    secondaryContainer = Color(0xFF134E4A),
+    onSecondaryContainer = Color(0xFFD1FAE5),
+    tertiary           = Color(0xFF7DD3FC),
+    onTertiary         = Color(0xFF082F49),
+    tertiaryContainer  = Color(0xFF0C4A6E),
+    onTertiaryContainer = Color(0xFFE0F2FE),
+    background         = IndigoDarkSurface,
+    surface            = SurfaceCardDark,
+    surfaceVariant     = IndigoDarkSurfaceAlt,
     onBackground       = OnSurfaceDark,
     onSurface          = OnSurfaceDark,
+    onSurfaceVariant   = OnSurfaceMutedDark,
+    outline            = Color(0xFF334155),
 )
 
 @Composable
 fun PetShopTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false,          // disabled so teal theme always shows
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -75,6 +87,7 @@ fun PetShopTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography  = Typography,
+        shapes      = AppShapes,
         content     = content
     )
 }

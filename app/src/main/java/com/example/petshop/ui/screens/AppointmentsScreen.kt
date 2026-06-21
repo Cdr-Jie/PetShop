@@ -293,6 +293,12 @@ private fun AddAppointmentDialog(
     var error           by remember { mutableStateOf("") }
     var showTimeSlider  by remember { mutableStateOf(false) }
 
+    LaunchedEffect(selectedClient?.clientId, petsForClient) {
+        selectedPet = selectedPet?.takeIf { pet ->
+            petsForClient.any { it.petId == pet.petId }
+        }
+    }
+
     val hour = Calendar.getInstance().apply { timeInMillis = scheduledAt }.get(Calendar.HOUR_OF_DAY)
     val minute = Calendar.getInstance().apply { timeInMillis = scheduledAt }.get(Calendar.MINUTE)
 

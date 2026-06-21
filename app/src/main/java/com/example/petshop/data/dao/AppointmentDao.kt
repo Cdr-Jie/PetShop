@@ -90,6 +90,28 @@ interface AppointmentDao {
         excludeAppointmentId: Int
     ): Int
 
+    @Query(
+        """
+        SELECT COUNT(*) FROM appointments
+        WHERE staffId = :staffId
+          AND appointmentId != :excludeAppointmentId
+          AND status IN ('PENDING','CONFIRMED','IN_PROGRESS')
+          AND scheduledAt < :candidateEndTime
+          AND (
+                scheduledAt + COALESCE(
+                    (SELECT durationMinutes * 60000 FROM services WHERE serviceId = appointments.serviceId),
+                    1800000
+                )
+              ) > :candidateStartTime
+        """
+    )
+    suspend fun countStaffOverlappingConflicts(
+        staffId: Int,
+        candidateStartTime: Long,
+        candidateEndTime: Long,
+        excludeAppointmentId: Int
+    ): Int
+
     @Query("""
         SELECT * FROM appointments
         WHERE status IN ('PENDING','CONFIRMED','IN_PROGRESS')

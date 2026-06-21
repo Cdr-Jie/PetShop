@@ -102,23 +102,35 @@ class AppointmentViewModel(app: Application) : AndroidViewModel(app) {
                         ?: 30
                     val slotEndTime = normalizedScheduledAt + serviceDurationMinutes * 60_000L
 
-                    val existingSlot = db.timeSlotDao().findByStartTime(staffId, normalizedScheduledAt)
-                    val resolvedSlotId = existingSlot?.timeSlotId
-                        ?: db.timeSlotDao().insert(
-                            TimeSlot(
-                                staffId = staffId,
-                                slotStartTime = normalizedScheduledAt,
-                                slotEndTime = slotEndTime
-                            )
-                        ).toInt()
-
-                    val activeAppointments = db.appointmentDao().countActiveByTimeSlot(resolvedSlotId)
-                    if (activeAppointments > 0 || existingSlot?.isBooked == true) {
+                    val overlappingSlot = db.timeSlotDao().findBookedOverlap(
+                        staffId = staffId,
+                        slotStartTime = normalizedScheduledAt,
+                        slotEndTime = slotEndTime,
+                        excludeTimeSlotId = null
+                    )
+                    if (overlappingSlot != null) {
                         bookingFailed = true
-                        failureMessage = "Selected staff timeslot is already booked."
+                        failureMessage = "Selected staff timeslot overlaps an existing booking."
                         null
                     } else {
-                        resolvedSlotId
+                        val existingSlot = db.timeSlotDao().findByStartTime(staffId, normalizedScheduledAt)
+                        val resolvedSlotId = existingSlot?.timeSlotId
+                            ?: db.timeSlotDao().insert(
+                                TimeSlot(
+                                    staffId = staffId,
+                                    slotStartTime = normalizedScheduledAt,
+                                    slotEndTime = slotEndTime
+                                )
+                            ).toInt()
+
+                        val activeAppointments = db.appointmentDao().countActiveByTimeSlot(resolvedSlotId)
+                        if (activeAppointments > 0 || existingSlot?.isBooked == true) {
+                            bookingFailed = true
+                            failureMessage = "Selected staff timeslot is already booked."
+                            null
+                        } else {
+                            resolvedSlotId
+                        }
                     }
                 } else {
                     null
@@ -179,20 +191,20 @@ class AppointmentViewModel(app: Application) : AndroidViewModel(app) {
                     val staffId = appointment.staffId
                         ?: error("Cannot confirm without assigning a vet.")
                     val normalizedStart = normalizeToMinute(appointment.scheduledAt)
-
-                    val conflicts = db.appointmentDao().countStaffConflictsAtTime(
-                        staffId = staffId,
-                        scheduledAt = normalizedStart,
-                        excludeAppointmentId = id
-                    )
-                    if (conflicts > 0) {
-                        error("Error: double booked. This vet already has another active appointment at this time.")
-                    }
-
                     val durationMinutes = appointment.serviceId
                         ?.let { db.serviceDao().getById(it)?.durationMinutes }
                         ?: 30
                     val slotEnd = normalizedStart + durationMinutes * 60_000L
+
+                    val conflicts = db.appointmentDao().countStaffOverlappingConflicts(
+                        staffId = staffId,
+                        candidateStartTime = normalizedStart,
+                        candidateEndTime = slotEnd,
+                        excludeAppointmentId = id
+                    )
+                    if (conflicts > 0) {
+                        error("Error: double booked. This vet already has another overlapping active appointment.")
+                    }
 
                     val slotForAppointment = db.vetTimeSlotDao().getSlotByAppointmentId(id)
                     if (slotForAppointment != null) {
@@ -204,6 +216,15 @@ class AppointmentViewModel(app: Application) : AndroidViewModel(app) {
                         )
 
                         if (slotAtTime == null) {
+                            val overlappingSlot = db.timeSlotDao().findBookedOverlap(
+                                staffId = staffId,
+                                slotStartTime = normalizedStart,
+                                slotEndTime = slotEnd,
+                                excludeTimeSlotId = appointment.timeSlotId
+                            )
+                            if (overlappingSlot != null) {
+                                error("Error: double booked. This vet already has another overlapping active appointment.")
+                            }
                             db.vetTimeSlotDao().insert(
                                 VetTimeSlot(
                                     staffId = staffId,
@@ -215,7 +236,7 @@ class AppointmentViewModel(app: Application) : AndroidViewModel(app) {
                             )
                         } else {
                             if (slotAtTime.isBooked && slotAtTime.appointmentId != id) {
-                                error("Error: double booked. This vet already has another active appointment at this time.")
+                                error("Error: double booked. This vet already has another overlapping active appointment.")
                             }
                             db.vetTimeSlotDao().updateBookingStatus(slotAtTime.slotId, true, id)
                         }

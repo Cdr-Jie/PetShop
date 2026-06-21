@@ -23,6 +23,24 @@ interface TimeSlotDao {
     @Query("SELECT * FROM time_slots WHERE staffId = :staffId AND slotStartTime = :slotStartTime LIMIT 1")
     suspend fun findByStartTime(staffId: Int, slotStartTime: Long): TimeSlot?
 
+    @Query(
+        """
+        SELECT * FROM time_slots
+        WHERE staffId = :staffId
+          AND isBooked = 1
+          AND slotStartTime < :slotEndTime
+          AND slotEndTime > :slotStartTime
+          AND (:excludeTimeSlotId IS NULL OR timeSlotId != :excludeTimeSlotId)
+        LIMIT 1
+        """
+    )
+    suspend fun findBookedOverlap(
+        staffId: Int,
+        slotStartTime: Long,
+        slotEndTime: Long,
+        excludeTimeSlotId: Int? = null
+    ): TimeSlot?
+
     @Query("UPDATE time_slots SET isBooked = :isBooked WHERE timeSlotId = :timeSlotId")
     suspend fun updateBookedState(timeSlotId: Int, isBooked: Boolean)
 }

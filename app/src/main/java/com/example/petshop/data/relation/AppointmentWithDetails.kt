@@ -9,6 +9,8 @@ data class AppointmentWithDetails(
     @Relation(parentColumn = "clientId", entityColumn = "clientId")
     val client: Client?,
     @Relation(parentColumn = "petId", entityColumn = "petId")
-    val pet: Pet?
+    val pet: Pet?,
+    @Relation(parentColumn = "staffId", entityColumn = "staffId")
+    val staff: Staff?
 )
 
