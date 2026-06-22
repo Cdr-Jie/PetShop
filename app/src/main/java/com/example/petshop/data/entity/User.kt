@@ -20,7 +20,7 @@ data class User(
     val email: String,
     val firstName: String = "",
     val lastName: String = "",
-    val phone: String = "",
+    val phone: String? = null,
     val avatarImageUri: String = "", // Default avatars can be set in UI
     val role: UserRole = UserRole.CLIENT,
     val isActive: Boolean = true,

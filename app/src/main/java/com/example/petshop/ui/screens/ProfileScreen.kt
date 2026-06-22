@@ -5,14 +5,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Pets
 import com.example.petshop.ui.components.PetShopTopAppBar
@@ -21,7 +20,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -40,7 +38,6 @@ fun ProfileScreen(
     vm: HomeViewModel = viewModel()
 ) {
     val myUser by vm.myUser.collectAsState()
-    val myClient by vm.myClient.collectAsState()
     val myPets by vm.myPets.collectAsState()
     val displayUser = myUser ?: user
 
@@ -86,14 +83,14 @@ fun ProfileScreen(
                                         )
                                         if (!displayUser?.email.isNullOrBlank()) {
                                             Text(
-                                                displayUser?.email ?: "",
+                                                displayUser.email,
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                         if (!displayUser?.phone.isNullOrBlank()) {
                                             Text(
-                                                displayUser?.phone ?: "",
+                                                displayUser.phone,
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -126,7 +123,7 @@ fun ProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Icon(Icons.Filled.Logout, "Logout", modifier = Modifier.padding(end = 8.dp))
+                    Icon(Icons.AutoMirrored.Filled.Logout, "Logout", modifier = Modifier.padding(end = 8.dp))
                     Text("Logout")
                 }
             }
@@ -271,7 +268,7 @@ private fun EditProfileDialog(
     var firstName by remember { mutableStateOf(user.firstName) }
     var lastName by remember { mutableStateOf(user.lastName) }
     var email by remember { mutableStateOf(user.email) }
-    var phone by remember { mutableStateOf(user.phone) }
+    var phone by remember { mutableStateOf(user.phone ?: "") }
     var avatarImageUri by remember { mutableStateOf(user.avatarImageUri) }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->

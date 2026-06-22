@@ -16,10 +16,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -31,13 +37,12 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.example.petshop.ui.components.PetShopTopAppBar
@@ -55,8 +60,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.petshop.data.entity.Medicine
+import com.example.petshop.data.entity.MedicineAdministrationLog
 import com.example.petshop.data.entity.MedicineInventory
+import com.example.petshop.data.entity.Staff
 import com.example.petshop.data.relation.InventoryWithMedicine
+import com.example.petshop.data.relation.MedicineLogWithMedicine
 import com.example.petshop.ui.viewmodel.MedicineViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -72,19 +80,36 @@ fun MedicineScreen(
     val medicines by vm.medicines.collectAsState()
     val inventory by vm.inventory.collectAsState()
     val lowStock by vm.lowStock.collectAsState()
+    val medicineLogs by vm.medicineLogs.collectAsState()
+    val veterinarians by vm.veterinarians.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var showAdd by remember { mutableStateOf(false) }
+    var showAddLog by remember { mutableStateOf(false) }
+    var showAddVet by remember { mutableStateOf(false) }
+    var logError by remember { mutableStateOf("") }
+    var vetError by remember { mutableStateOf("") }
     var selectedMedicine by remember { mutableStateOf<Medicine?>(null) }
     var selectedInventory by remember { mutableStateOf<InventoryWithMedicine?>(null) }
+    var selectedLog by remember { mutableStateOf<MedicineLogWithMedicine?>(null) }
+    var selectedVet by remember { mutableStateOf<Staff?>(null) }
 
     Scaffold(
         topBar = {
-            PetShopTopAppBar(title = "Medicine Inventory", onBack = onBack)
+            PetShopTopAppBar(title = "Medicine", onBack = onBack)
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "Add Medicine")
+            when (selectedTab) {
+                0, 1 -> FloatingActionButton(onClick = { showAdd = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add Medicine")
+                }
+                2 -> FloatingActionButton(onClick = { showAddLog = true; logError = "" }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add Log")
+                }
+                3 -> FloatingActionButton(onClick = { showAddVet = true; vetError = "" }) {
+                    Icon(Icons.Filled.PersonAdd, contentDescription = "Add Veterinarian")
+                }
+                else -> {}
             }
         }
     ) { padding ->
@@ -103,9 +128,11 @@ fun MedicineScreen(
                 }
             }
 
-            TabRow(selectedTabIndex = selectedTab) {
+            ScrollableTabRow(selectedTabIndex = selectedTab) {
                 Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Medicines") })
                 Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Inventory") })
+                Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }, text = { Text("Medicine Log") })
+                Tab(selected = selectedTab == 3, onClick = { selectedTab = 3 }, text = { Text("Veterinarian") })
             }
 
             when (selectedTab) {
@@ -115,6 +142,8 @@ fun MedicineScreen(
                     onOpen = { selectedInventory = it },
                     onAdjust = { invId, delta -> vm.adjustStock(invId, delta) }
                 )
+                2 -> MedicineLogList(logs = medicineLogs, onOpen = { selectedLog = it })
+                3 -> VeterinarianList(veterinarians = veterinarians, onOpen = { selectedVet = it })
             }
         }
     }
@@ -125,6 +154,34 @@ fun MedicineScreen(
             onConfirm = { name, brand, cat, unit, rx, qty, up, sp, exp ->
                 vm.addMedicine(name, brand, cat, unit, rx, qty, up, sp, exp)
                 showAdd = false
+            }
+        )
+    }
+
+    if (showAddLog) {
+        AddMedicineLogDialog(
+            inventory = inventory,
+            veterinarians = veterinarians,
+            error = logError,
+            onDismiss = { showAddLog = false; logError = "" },
+            onConfirm = { invId, petName, qty, adminBy, staffId, notes ->
+                vm.addMedicineLog(invId, petName, qty, adminBy, staffId, notes) { success, msg ->
+                    if (success) { showAddLog = false; logError = "" }
+                    else logError = msg ?: "Error logging medicine."
+                }
+            }
+        )
+    }
+
+    if (showAddVet) {
+        AddVeterinarianDialog(
+            error = vetError,
+            onDismiss = { showAddVet = false; vetError = "" },
+            onConfirm = { firstName, lastName, phone, email, spec, license ->
+                vm.addVeterinarian(firstName, lastName, phone, email, spec, license) { success, msg ->
+                    if (success) { showAddVet = false; vetError = "" }
+                    else vetError = msg ?: "Error adding veterinarian."
+                }
             }
         )
     }
@@ -159,7 +216,48 @@ fun MedicineScreen(
             }
         )
     }
+
+    selectedLog?.let { log ->
+        MedicineLogDetailDialog(
+            log = log,
+            onDismiss = { selectedLog = null },
+            onDelete = {
+                vm.deleteMedicineLog(
+                    MedicineAdministrationLog(
+                        logId          = log.logId,
+                        inventoryId    = log.inventoryId,
+                        petName        = log.petName,
+                        quantityUsed   = log.quantityUsed,
+                        administeredAt = log.administeredAt,
+                        administeredBy = log.administeredBy,
+                        staffId        = log.staffId,
+                        notes          = log.notes
+                    )
+                )
+                selectedLog = null
+            }
+        )
+    }
+
+    selectedVet?.let { vet ->
+        VeterinarianDetailDialog(
+            vet = vet,
+            onDismiss = { selectedVet = null },
+            onSave = { updated ->
+                vm.updateVeterinarian(updated) { success, _ ->
+                    if (success) selectedVet = null
+                }
+            },
+            onDelete = {
+                vm.deleteVeterinarian(vet) { success, _ ->
+                    if (success) selectedVet = null
+                }
+            }
+        )
+    }
 }
+
+// ─── Medicine List ─────────────────────────────────────────────────────────────
 
 @Composable
 private fun MedicinesList(medicines: List<Medicine>, onOpen: (Medicine) -> Unit) {
@@ -190,6 +288,8 @@ private fun MedicinesList(medicines: List<Medicine>, onOpen: (Medicine) -> Unit)
         }
     }
 }
+
+// ─── Inventory List ────────────────────────────────────────────────────────────
 
 @Composable
 private fun InventoryList(
@@ -244,6 +344,435 @@ private fun InventoryList(
             }
         }
     }
+}
+
+// ─── Medicine Log List ─────────────────────────────────────────────────────────
+
+@Composable
+private fun MedicineLogList(
+    logs: List<MedicineLogWithMedicine>,
+    onOpen: (MedicineLogWithMedicine) -> Unit
+) {
+    val sdf = remember { SimpleDateFormat("MMM dd, yyyy  hh:mm a", Locale.getDefault()) }
+    if (logs.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No medicine logs recorded", color = MaterialTheme.colorScheme.outline)
+        }
+    } else {
+        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(logs, key = { it.logId }) { log ->
+                Card(
+                    onClick = { onOpen(log) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(2.dp)
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Assignment, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(24.dp))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(log.medicineName, fontWeight = FontWeight.SemiBold)
+                            Text("Pet: ${log.petName}  •  Qty: ${log.quantityUsed} ${log.medicineUnit}", style = MaterialTheme.typography.bodySmall)
+                            Text("By: ${log.administeredBy}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                            Text(sdf.format(Date(log.administeredAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Veterinarian List ─────────────────────────────────────────────────────────
+
+@Composable
+private fun VeterinarianList(veterinarians: List<Staff>, onOpen: (Staff) -> Unit) {
+    if (veterinarians.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No veterinarians on record", color = MaterialTheme.colorScheme.outline)
+        }
+    } else {
+        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(veterinarians, key = { it.staffId }) { vet ->
+                Card(
+                    onClick = { onOpen(vet) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(2.dp)
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.LocalHospital, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(26.dp))
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Dr. ${vet.firstName} ${vet.lastName}", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+                            if (vet.specialization.isNotBlank()) {
+                                Text(vet.specialization, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                            if (vet.licenseNumber.isNotBlank()) {
+                                Text("License: ${vet.licenseNumber}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                            if (vet.phone.isNotBlank()) {
+                                Text("📞 ${vet.phone}", style = MaterialTheme.typography.bodySmall)
+                            }
+                            if (vet.email.isNotBlank()) {
+                                Text("✉ ${vet.email}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                        if (!vet.isActive) {
+                            Box(
+                                modifier = Modifier
+                                    .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("Inactive", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Medicine Log Detail Dialog ────────────────────────────────────────────────
+
+@Composable
+private fun MedicineLogDetailDialog(
+    log: MedicineLogWithMedicine,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val sdf = remember { SimpleDateFormat("MMM dd, yyyy  hh:mm a", Locale.getDefault()) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Administration Log") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Medicine: ${log.medicineName}", fontWeight = FontWeight.SemiBold)
+                Text("Batch: ${log.batchNumber.ifBlank { "—" }}")
+                Text("Pet: ${log.petName}")
+                Text("Quantity Used: ${log.quantityUsed} ${log.medicineUnit}")
+                Text("Administered By: ${log.administeredBy}")
+                Text("Date/Time: ${sdf.format(Date(log.administeredAt))}")
+                if (log.notes.isNotBlank()) Text("Notes: ${log.notes}")
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = { showDeleteConfirm = true },
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) { Text("Delete") }
+        }
+    )
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Log Entry?") },
+            text = { Text("This administration record will be permanently removed.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDelete()
+                        showDeleteConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+// ─── Add Medicine Log Dialog ───────────────────────────────────────────────────
+
+@Composable
+private fun AddMedicineLogDialog(
+    inventory: List<InventoryWithMedicine>,
+    veterinarians: List<Staff>,
+    error: String,
+    onDismiss: () -> Unit,
+    onConfirm: (Int, String, Int, String, Int?, String) -> Unit
+) {
+    if (inventory.isEmpty()) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("No Inventory") },
+            text = { Text("Please add medicine inventory before logging administration.") },
+            confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } }
+        )
+        return
+    }
+
+    var selectedInvIndex by remember { mutableIntStateOf(0) }
+    var petName by remember { mutableStateOf("") }
+    var quantityUsed by remember { mutableStateOf("1") }
+    var administeredBy by remember { mutableStateOf("") }
+    var selectedVetIndex by remember { mutableIntStateOf(0) }
+    var notes by remember { mutableStateOf("") }
+    var localError by remember { mutableStateOf("") }
+
+    val inventoryLabels = inventory.map { "${it.medicine?.name ?: "Unknown"} (${it.inventory.quantity} left)" }
+    val vetLabels = listOf("None") + veterinarians.map { "Dr. ${it.firstName} ${it.lastName}" }
+
+    // Show stock-based error from parent or local validation error
+    val displayError = error.ifBlank { localError }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Log Medicine Administration") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AppDropdown(
+                    label = "Medicine",
+                    selected = inventoryLabels.getOrElse(selectedInvIndex) { "" },
+                    options = inventoryLabels,
+                    onSelect = { selectedInvIndex = it }
+                )
+                OutlinedTextField(
+                    value = petName,
+                    onValueChange = { petName = it },
+                    label = { Text("Pet Name *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = quantityUsed,
+                    onValueChange = { quantityUsed = it },
+                    label = { Text("Quantity Used *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = administeredBy,
+                    onValueChange = { administeredBy = it },
+                    label = { Text("Administered By *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                AppDropdown(
+                    label = "Authorizing Veterinarian",
+                    selected = vetLabels.getOrElse(selectedVetIndex) { "None" },
+                    options = vetLabels,
+                    onSelect = { selectedVetIndex = it }
+                )
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("Notes") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                if (displayError.isNotBlank()) {
+                    Text(displayError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val qty = quantityUsed.toIntOrNull()
+                when {
+                    petName.isBlank() -> localError = "Pet name is required"
+                    administeredBy.isBlank() -> localError = "Administered by is required"
+                    qty == null || qty <= 0 -> localError = "Enter a valid quantity"
+                    else -> {
+                        localError = ""
+                        val invId = inventory[selectedInvIndex].inventory.inventoryId
+                        val staffId = if (selectedVetIndex == 0) null else veterinarians[selectedVetIndex - 1].staffId
+                        onConfirm(invId, petName.trim(), qty, administeredBy.trim(), staffId, notes.trim())
+                    }
+                }
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+// ─── Veterinarian Detail Dialog ────────────────────────────────────────────────
+
+@Composable
+private fun VeterinarianDetailDialog(
+    vet: Staff,
+    onDismiss: () -> Unit,
+    onSave: (Staff) -> Unit,
+    onDelete: () -> Unit
+) {
+    var showEdit by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Dr. ${vet.firstName} ${vet.lastName}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (vet.specialization.isNotBlank()) Text("Specialization: ${vet.specialization}")
+                if (vet.licenseNumber.isNotBlank()) Text("License: ${vet.licenseNumber}")
+                if (vet.phone.isNotBlank()) Text("Phone: ${vet.phone}")
+                if (vet.email.isNotBlank()) Text("Email: ${vet.email}")
+                Text("Status: ${if (vet.isActive) "Active" else "Inactive"}")
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { showEdit = true }) { Text("Edit") }
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = { showDeleteConfirm = true },
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) { Text("Delete") }
+        }
+    )
+
+    if (showEdit) {
+        EditVeterinarianDialog(
+            vet = vet,
+            onDismiss = { showEdit = false },
+            onSave = { updated ->
+                onSave(updated)
+                showEdit = false
+            }
+        )
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Veterinarian?") },
+            text = { Text("Dr. ${vet.firstName} ${vet.lastName} will be permanently removed.") },
+            confirmButton = {
+                Button(
+                    onClick = { onDelete(); showDeleteConfirm = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+// ─── Edit Veterinarian Dialog ──────────────────────────────────────────────────
+
+@Composable
+private fun EditVeterinarianDialog(
+    vet: Staff,
+    onDismiss: () -> Unit,
+    onSave: (Staff) -> Unit
+) {
+    var firstName by remember { mutableStateOf(vet.firstName) }
+    var lastName by remember { mutableStateOf(vet.lastName) }
+    var phone by remember { mutableStateOf(vet.phone) }
+    var email by remember { mutableStateOf(vet.email) }
+    var specialization by remember { mutableStateOf(vet.specialization) }
+    var licenseNumber by remember { mutableStateOf(vet.licenseNumber) }
+    var error by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Veterinarian") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = firstName, onValueChange = { firstName = it }, label = { Text("First Name *") }, modifier = Modifier.weight(1f), singleLine = true)
+                    OutlinedTextField(value = lastName, onValueChange = { lastName = it }, label = { Text("Last Name *") }, modifier = Modifier.weight(1f), singleLine = true)
+                }
+                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Phone") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = specialization, onValueChange = { specialization = it }, label = { Text("Specialization") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = licenseNumber, onValueChange = { licenseNumber = it }, label = { Text("License Number") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                if (firstName.isBlank() || lastName.isBlank()) { error = "First and last name are required"; return@Button }
+                onSave(vet.copy(
+                    firstName = firstName.trim(),
+                    lastName = lastName.trim(),
+                    phone = phone.trim(),
+                    email = email.trim(),
+                    specialization = specialization.trim(),
+                    licenseNumber = licenseNumber.trim()
+                ))
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+// ─── Add Veterinarian Dialog ───────────────────────────────────────────────────
+
+@Composable
+private fun AddVeterinarianDialog(
+    error: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, String, String, String, String) -> Unit
+) {
+    var firstName by remember { mutableStateOf("") }
+    var lastName by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var specialization by remember { mutableStateOf("") }
+    var licenseNumber by remember { mutableStateOf("") }
+    var localError by remember { mutableStateOf("") }
+
+    val displayError = error.ifBlank { localError }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Veterinarian") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = firstName, onValueChange = { firstName = it }, label = { Text("First Name *") }, modifier = Modifier.weight(1f), singleLine = true)
+                    OutlinedTextField(value = lastName, onValueChange = { lastName = it }, label = { Text("Last Name *") }, modifier = Modifier.weight(1f), singleLine = true)
+                }
+                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Phone") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = specialization, onValueChange = { specialization = it }, label = { Text("Specialization") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = licenseNumber, onValueChange = { licenseNumber = it }, label = { Text("License Number") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                if (displayError.isNotBlank()) Text(displayError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                if (firstName.isBlank() || lastName.isBlank()) { localError = "First and last name are required"; return@Button }
+                localError = ""
+                onConfirm(firstName.trim(), lastName.trim(), phone.trim(), email.trim(), specialization.trim(), licenseNumber.trim())
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable
@@ -308,6 +837,8 @@ private fun MedicineDetailDialog(
         )
     }
 }
+
+// ─── Inventory Detail Dialog ───────────────────────────────────────────────────
 
 @Composable
 private fun InventoryDetailDialog(
@@ -378,6 +909,8 @@ private fun InventoryDetailDialog(
     }
 }
 
+// ─── Add Medicine Dialog ───────────────────────────────────────────────────────
+
 @Composable
 private fun AddMedicineDialog(
     onDismiss: () -> Unit,
@@ -441,6 +974,8 @@ private fun AddMedicineDialog(
     )
 }
 
+// ─── Edit Medicine Dialog ──────────────────────────────────────────────────────
+
 @Composable
 private fun EditMedicineDialog(
     medicine: Medicine,
@@ -490,6 +1025,8 @@ private fun EditMedicineDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
+
+// ─── Edit Inventory Dialog ─────────────────────────────────────────────────────
 
 @Composable
 private fun EditInventoryDialog(

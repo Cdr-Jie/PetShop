@@ -24,9 +24,10 @@ import java.util.Calendar
         TimeSlot::class,
         Medicine::class,
         MedicineInventory::class,
+        MedicineAdministrationLog::class,
         VetTimeSlot::class
     ],
-    version = 3,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -41,6 +42,7 @@ abstract class PetShopDatabase : RoomDatabase() {
     abstract fun timeSlotDao(): TimeSlotDao
     abstract fun medicineDao(): MedicineDao
     abstract fun medicineInventoryDao(): MedicineInventoryDao
+    abstract fun medicineAdministrationLogDao(): MedicineAdministrationLogDao
     abstract fun vetTimeSlotDao(): VetTimeSlotDao
 
     companion object {
@@ -64,15 +66,20 @@ abstract class PetShopDatabase : RoomDatabase() {
     }
 
     /**
-     * Populates the database with seed data on first creation.
+     * Populates the database with seed data on first creation OR after a destructive migration.
      */
     private class SeedCallback : Callback() {
         override fun onCreate(db: SupportSQLiteDatabase) {
             super.onCreate(db)
             INSTANCE?.let { database ->
-                CoroutineScope(Dispatchers.IO).launch {
-                    seedData(database)
-                }
+                CoroutineScope(Dispatchers.IO).launch { seedData(database) }
+            }
+        }
+
+        override fun onDestructiveMigration(db: SupportSQLiteDatabase) {
+            super.onDestructiveMigration(db)
+            INSTANCE?.let { database ->
+                CoroutineScope(Dispatchers.IO).launch { seedData(database) }
             }
         }
 
@@ -276,7 +283,7 @@ abstract class PetShopDatabase : RoomDatabase() {
             medicines.forEach { database.medicineDao().insert(it) }
 
             // Starter medicine stock
-            database.medicineInventoryDao().insert(
+            val amoxInvId = database.medicineInventoryDao().insert(
                 MedicineInventory(
                     medicineId = amoxicillinId,
                     quantity = 120,
@@ -286,8 +293,8 @@ abstract class PetShopDatabase : RoomDatabase() {
                     reorderLevel = 25,
                     supplierName = "Vet Pharma"
                 )
-            )
-            database.medicineInventoryDao().insert(
+            ).toInt()
+            val rabiesInvId = database.medicineInventoryDao().insert(
                 MedicineInventory(
                     medicineId = rabiesVaccineId,
                     quantity = 8,
@@ -296,6 +303,45 @@ abstract class PetShopDatabase : RoomDatabase() {
                     batchNumber = "RBV-2406-B",
                     reorderLevel = 10,
                     supplierName = "AnimalCare Supplies"
+                )
+            ).toInt()
+
+            // Sample medicine administration logs
+            val threeDaysAgo = System.currentTimeMillis() - 3 * 24 * 60 * 60 * 1000L
+            val twoDaysAgo   = System.currentTimeMillis() - 2 * 24 * 60 * 60 * 1000L
+            val yesterday    = System.currentTimeMillis() - 1 * 24 * 60 * 60 * 1000L
+
+            database.medicineAdministrationLogDao().insert(
+                MedicineAdministrationLog(
+                    inventoryId    = amoxInvId,
+                    petName        = "Luna",
+                    quantityUsed   = 2,
+                    administeredAt = threeDaysAgo,
+                    administeredBy = "Dr. Mei Lee",
+                    staffId        = vetStaffId,
+                    notes          = "Post-surgery antibiotic course, Day 1"
+                )
+            )
+            database.medicineAdministrationLogDao().insert(
+                MedicineAdministrationLog(
+                    inventoryId    = amoxInvId,
+                    petName        = "Milo",
+                    quantityUsed   = 1,
+                    administeredAt = twoDaysAgo,
+                    administeredBy = "Dr. Mei Lee",
+                    staffId        = vetStaffId,
+                    notes          = "Respiratory infection treatment"
+                )
+            )
+            database.medicineAdministrationLogDao().insert(
+                MedicineAdministrationLog(
+                    inventoryId    = rabiesInvId,
+                    petName        = "Coco",
+                    quantityUsed   = 1,
+                    administeredAt = yesterday,
+                    administeredBy = "Dr. Mei Lee",
+                    staffId        = vetStaffId,
+                    notes          = "Annual rabies booster"
                 )
             )
 
